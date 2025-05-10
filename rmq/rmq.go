@@ -7,8 +7,8 @@ import (
 	"math/rand"
 	"net/url"
 	"time"
-
-	"github.com/streadway/amqp"
+	
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/umbrella-sh/um-common/ext"
 )
 
@@ -29,10 +29,10 @@ type RmqSession struct {
 const (
 	// When reconnecting to the server after connection failure
 	reconnectDelay = 5 * time.Second
-
+	
 	// When setting up the channel after a channel exception
 	reInitDelay = 2 * time.Second
-
+	
 	// When resending messages, the server didn't confirm
 	resendDelay = 5 * time.Second
 )
@@ -66,7 +66,7 @@ func NewTLS(queueName string, connAddr string, tlsCommonName string) *RmqSession
 	if tlsCommonName != "" {
 		tlsConfig.ServerName = tlsCommonName
 	}
-
+	
 	session := RmqSession{
 		ssl:  tlsConfig,
 		name: queueName,
@@ -100,12 +100,12 @@ func (session *RmqSession) handleReconnect(addr string) {
 	for {
 		session.isReady = false
 		session.logReceiver("Attempting to connect", nil)
-
+		
 		conn, err := session.connect(addr)
-
+		
 		if err != nil {
 			session.logReceiver("Failed to connect. Retrying...", err)
-
+			
 			select {
 			case <-session.done:
 				return
@@ -113,7 +113,7 @@ func (session *RmqSession) handleReconnect(addr string) {
 			}
 			continue
 		}
-
+		
 		if done := session.handleReInit(conn); done {
 			break
 		}
@@ -124,17 +124,17 @@ func (session *RmqSession) handleReconnect(addr string) {
 func (session *RmqSession) connect(addr string) (*amqp.Connection, error) {
 	var conn *amqp.Connection
 	var err error
-
+	
 	if session.ssl != nil {
 		conn, err = amqp.DialTLS(addr, session.ssl)
 	} else {
 		conn, err = amqp.Dial(addr)
 	}
-
+	
 	if err != nil {
 		return nil, err
 	}
-
+	
 	session.changeConnection(conn)
 	session.logReceiver("Connected!", nil)
 	return conn, nil
@@ -145,12 +145,12 @@ func (session *RmqSession) connect(addr string) (*amqp.Connection, error) {
 func (session *RmqSession) handleReInit(conn *amqp.Connection) bool {
 	for {
 		session.isReady = false
-
+		
 		err := session.init(conn)
-
+		
 		if err != nil {
 			session.logReceiver("Failed to initialize channel. Retrying...", err)
-
+			
 			select {
 			case <-session.done:
 				return true
@@ -158,7 +158,7 @@ func (session *RmqSession) handleReInit(conn *amqp.Connection) bool {
 			}
 			continue
 		}
-
+		
 		select {
 		case <-session.done:
 			return true
@@ -174,20 +174,20 @@ func (session *RmqSession) handleReInit(conn *amqp.Connection) bool {
 // init will initialize channel & declare queue
 func (session *RmqSession) init(conn *amqp.Connection) error {
 	ch, err := conn.Channel()
-
+	
 	if err != nil {
 		return err
 	}
-
+	
 	err = ch.Confirm(false)
 	if err != nil {
 		return err
 	}
-
+	
 	session.changeChannel(ch)
 	session.isReady = true
 	session.logReceiver("Setup!", nil)
-
+	
 	return nil
 }
 
